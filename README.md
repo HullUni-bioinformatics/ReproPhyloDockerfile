@@ -14,7 +14,7 @@ HTML.py 0.04
   
 **current pip versions:**  
 Ipython-notebook  
-ETE
+ETE  
 dendropy  
 cloud  
 pandas  
