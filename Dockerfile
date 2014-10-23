@@ -82,6 +82,7 @@ RUN chmod a+x /home/reprophylo/pal2nal.pl
 
 VOLUME /notebooks
 WORKDIR /notebooks
+RUN chmod -R a+rw /notebooks
 
 # ipython notebook
 RUN pip install ipython[notebook]
