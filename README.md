@@ -25,6 +25,9 @@ mafft
 git  
 python-biopython  
 python-matplotlib  
+python-numpy  
+
+
 
 
 how to download and install
