@@ -5,7 +5,6 @@ MAINTAINER Amir Szitenberg <a.szitenberg@hull.ac.uk>
  
 # Make sure apt is up to date
 RUN apt-get update
-RUN apt-get update -y --fix-missing
 RUN apt-get upgrade -y
  
 # Not essential, but wise to set the lang

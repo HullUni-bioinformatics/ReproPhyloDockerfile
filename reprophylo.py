@@ -26,6 +26,7 @@ if False:
     cloud 2.8.5
     numpy 1.8.2
     matplotlib 1.3.1
+    pandas
     
     RAxML 8
     Phylobayes
@@ -95,7 +96,8 @@ def list_loci_in_genbank(genbank_filename, control_filename, loci_report = None)
             # If it contains some attribute called 'gene' save that
             if 'gene' in feature.qualifiers:
                geneName = feature.qualifiers['gene'][0]
-               geneName.replace(',',';')
+               geneName.replace(',','_')
+               geneName.replace('/','_')
                if feature.type+','+geneName in gene_dict:
                    gene_dict[feature.type+','+geneName]+=1
                else:    
@@ -105,7 +107,8 @@ def list_loci_in_genbank(genbank_filename, control_filename, loci_report = None)
             # Else if it contains some attribute called 'product' save that instead
             elif 'product' in feature.qualifiers:
                geneName = feature.qualifiers['product'][0]
-               geneName.replace(',',';')
+               geneName.replace(',','_')
+               geneName.replace('/','_')
                if feature.type+','+geneName in gene_dict:
                    gene_dict[feature.type+','+geneName]+=1
                else:    
@@ -114,9 +117,9 @@ def list_loci_in_genbank(genbank_filename, control_filename, loci_report = None)
                
             # Otherwise, quit.
             else:
-               print 'ERROR when parsing feature: could not find either gene or product'
-               print feature.qualifiers
-               quit()
+               print 'ERROR when parsing feature: could not find either gene or product in '+record.id
+               #print feature.qualifiers
+               #quit()
    #print(gene_dict)
        
    #sorting happens via a list
@@ -146,7 +149,7 @@ def list_loci_in_genbank(genbank_filename, control_filename, loci_report = None)
                else:
                    control_file_lines[gen_group[0].replace(' ','_')] = [feature_type, alias]
            else:
-               name = alias.replace(' ','_')
+               name = alias.replace(' ','_').replace('/','_')
                control_file_lines[name] = [feature_type, alias]
                     
    control_file_handle = open(control_filename, 'wt')
@@ -420,12 +423,12 @@ def keep_feature(feature, loci):
         if feature.type == 'source':
             keep = 1
         elif feature.type == g.feature_type:
-            qaul = False
+            qual = None
             if 'gene' in feature.qualifiers.keys():
                 qual = 'gene'
             elif 'product' in feature.qualifiers.keys():
                 qual = 'product'
-            if not qual == False and feature.qualifiers[qual][0] in g.aliases:
+            if qual and feature.qualifiers[qual][0] in g.aliases:
                 keep = 1
     if keep == 1:
         return True
@@ -688,16 +691,16 @@ def count_positions(aln_column):
 def global_aln_stats(aln_obj):
     total_gaps = 0
     prop_list = []
-    non_uniform_count = 0
+    non_uniform_count = aln_obj.get_alignment_length()
     parsimony_informative = 0
     for i in range(aln_obj.get_alignment_length()):
         total_gaps += aln_obj[:, i].count('-')
         prop_list.append(aln_obj[:, i].count('-')/float(len(aln_obj)))
         if len(count_positions(aln_obj[:, i]).keys()) == 1:
-            non_uniform_count += 1
+            non_uniform_count -= 1
         elif (len(count_positions(aln_obj[:, i]).keys()) == 2 and
               '-' in  count_positions(aln_obj[:, i]).keys()):
-            non_uniform_count += 1
+            non_uniform_count -= 1
         if len([p for p in count_positions(aln_obj[:, i]).keys() if (p != '-' and  count_positions(aln_obj[:, i])[p] > 1)]) > 1:
             parsimony_informative += 1
     mean_gap_prop = sum(prop_list)/aln_obj.get_alignment_length()
@@ -705,10 +708,12 @@ def global_aln_stats(aln_obj):
 
 def count_undetermined_lines(aln_obj):
     count = 0
+    ids = []
     for seq in aln_obj:
         if str(seq.seq).count('-') == aln_obj.get_alignment_length():
             count += 1
-    return count
+            ids.append(seq.id)
+    return count, ids
 
 def count_collapsed_aln_seqs(aln_obj):
     count = 1
@@ -726,12 +731,58 @@ def aln_summary(aln_obj):
              "Unique sequences: %i"%count_collapsed_aln_seqs(aln_obj),
              "Average gap prop.: %f\nVariable columns: %i\nParsimony informative: %i"
              %global_aln_stats(aln_obj),
-             "Undetermined sequences: %i"%count_undetermined_lines(aln_obj)
+             "Undetermined sequences: %i"%(count_undetermined_lines(aln_obj)[0])
              ]
     return [lines, len(aln_obj), count_undetermined_lines(aln_obj), count_collapsed_aln_seqs(aln_obj)]        
             
-            
 
+def loci_list_from_csv(loci):
+    if any(len(line.split(',')) >= 4 for line in open(loci, 'r').readlines()):
+        pass
+    else:
+        raise IOError("File %s has no valid loci of format char_type,feature_type,name,aliases"%loci)
+        
+        
+    loci_dict = {}
+    loci_list = []
+    for line in [line.rstrip() for line in open(loci, 'r').readlines() if len(line.rstrip()) > 0]:
+        if len(line.split(',')) < 4:
+            raise IOError("The line %s in file %s is missing arguments. Needs at least char_type,feature_type,name,aliases"%
+                          (line.rstrip(), loci))
+        else:
+            group = None
+            try:
+                group = int(line.rstrip().split(',')[-1])
+            except:
+                pass
+            
+            if group:
+                locus_exists = False
+                for name in loci_dict:
+                    if 'group' in loci_dict[name].keys() and loci_dict[name]['group'] == group:
+                        loci_dict[name]['aliases'] += line.split(',')[3:-1]
+                        locus_exists = True
+                if not locus_exists:
+                    loci_dict[line.split(',')[2]] = {'group': int(line.rstrip().split(',')[-1]),
+                                                     'char_type': line.split(',')[0],
+                                                     'feature_type': line.split(',')[1],
+                                                     'aliases': line.split(',')[3:-1]
+                                                     }
+            else:
+                loci_dict[line.split(',')[2]] = {'group': None,
+                                                 'char_type': line.split(',')[0],
+                                                 'feature_type': line.split(',')[1],
+                                                 'aliases': line.split(',')[3:]
+                                                 }
+                
+            
+            
+    for name in loci_dict:
+        loci_list.append(Locus(loci_dict[name]['char_type'],
+                               loci_dict[name]['feature_type'],
+                               name,
+                               loci_dict[name]['aliases']))
+    return loci_list
 
 
 ##############################################################################################
@@ -765,6 +816,12 @@ class Project:
         """
         self.records = []
         self.starttime = str(time.asctime())
+        self.user = None
+        if os.path.isfile('USER'):
+            self.user = []
+            for line in open('USER','r').readlines():
+                key, arg = line.rstrip().split('=')
+                self.user.append([key, arg])
         self.loci = loci
         self.records_by_locus = {}
         self.concatenations = []
@@ -792,56 +849,11 @@ class Project:
                 else:
                     seen.append(locus.name)
         elif isinstance(loci,str):
-            if any(len(line.split(',')) >= 4 for line in open(loci, 'r').readlines()):
-                pass
-            else:
-                raise IOError("File %s has no valid loci of format char_type,feature_type,name,aliases"%loci)
-                
-                
-            loci_dict = {}
-            loci_list = []
-            for line in [line.rstrip() for line in open(loci, 'r').readlines() if len(line.rstrip()) > 0]:
-                if len(line.split(',')) < 4:
-                    raise IOError("The line %s in file %s is missing arguments. Needs at least char_type,feature_type,name,aliases"%
-                                  (line.rstrip(), loci))
-                else:
-                    group = None
-                    try:
-                        group = int(line.rstrip().split(',')[-1])
-                    except:
-                        pass
-                    
-                    if group:
-                        locus_exists = False
-                        for name in loci_dict:
-                            if 'group' in loci_dict[name].keys() and loci_dict[name]['group'] == group:
-                                loci_dict[name]['aliases'] += line.split(',')[3:-1]
-                                locus_exists = True
-                        if not locus_exists:
-                            loci_dict[line.split(',')[2]] = {'group': int(line.rstrip().split(',')[-1]),
-                                                             'char_type': line.split(',')[0],
-                                                             'feature_type': line.split(',')[1],
-                                                             'aliases': line.split(',')[3:-1]
-                                                             }
-                    else:
-                        loci_dict[line.split(',')[2]] = {'group': None,
-                                                         'char_type': line.split(',')[0],
-                                                         'feature_type': line.split(',')[1],
-                                                         'aliases': line.split(',')[3:]
-                                                         }
-                        
-                    
-                    
-            for name in loci_dict:
-                loci_list.append(Locus(loci_dict[name]['char_type'],
-                                       loci_dict[name]['feature_type'],
-                                       name,
-                                       loci_dict[name]['aliases']))
-            self.loci = loci_list
-            print 'Read the following loci from file %s:'%loci
-            for l in self.loci:
-                print str(l)
-            self.aln_summaries = []
+            self.loci = loci_list_from_csv(loci)
+            #print 'Read the following loci from file %s:'%loci
+            #for l in self.loci:
+                #print str(l)
+        self.aln_summaries = []
                 
                 
     def __str__(self):
@@ -892,8 +904,20 @@ class Project:
                         self.records.append(dwindled_record)
         if __builtin__.git:
             import rpgit
-            comment = "%i genbank/embl data file(s) from %s" % (len(input_filenames_list), time.asctime())
-            rpgit.gitCommit(comment)          
+            comment = "%i genbank/embl data file(s) from %s" % (len(input_filenames_list), time.asctime()) 
+            for filename in input_filenames_list:
+                rpgit.gitAdd(filename)
+            cwd = os.getcwd()
+            import fnmatch
+            matches = []
+            for root, dirnames, filenames in os.walk(cwd):
+                for filename in fnmatch.filter(filenames, '*.py'):
+                    matches.append(os.path.join(root, filename))
+                for filename in fnmatch.filter(filenames, '*.ipynb'):
+                    matches.append(os.path.join(root, filename))
+            for match in matches:
+                rpgit.gitAdd(match)    
+            rpgit.gitCommit(comment) 
             
         
         
@@ -942,7 +966,7 @@ class Project:
         for record in self.records:
             if 'denovo' in record.id:
                 serial = int(record.id[6:])
-                if serial > count:
+                if serial >= count:
                     count = serial+1
         for input_filename in input_filenames:
             if __builtin__.git:
@@ -957,8 +981,14 @@ class Project:
                 record.name = record.id
                 source.qualifiers['feature_id'] = [record.id+'_source']
                 record.features = [source]
+                if '-' in str(record.seq):
+                    record.seq = Seq(str(record.seq).replace('-',''))
+                    warnings.warn("Reseting gaps in records from %s"%input_filename)
                 if char_type == 'prot':
                     record.seq.alphabet = IUPAC.protein
+                    #feature = SeqFeature(FeatureLocation(0, len(record.seq)), type='Protein', strand=1)
+                    #feature.qualifiers['translation'] = [str(record.seq)]
+                    #feature.qualifiers['protonly']=['true']
                 elif char_type == 'dna':
                     record.seq.alphabet = IUPAC.ambiguous_dna
                 count += 1
@@ -967,10 +997,122 @@ class Project:
         if __builtin__.git:
             import rpgit
             comment = "%i denovo data file(s) from %s" % (len(input_filenames), time.asctime())
+            for filename in input_filenames:
+                rpgit.gitAdd(filename)
+            cwd = os.getcwd()
+            import fnmatch
+            matches = []
+            for root, dirnames, filenames in os.walk(cwd):
+                for filename in fnmatch.filter(filenames, '*.py'):
+                    matches.append(os.path.join(root, filename))
+                for filename in fnmatch.filter(filenames, '*.ipynb'):
+                    matches.append(os.path.join(root, filename))
+            for match in matches:
+                rpgit.gitAdd(match)
             rpgit.gitCommit(comment)
-               
-               
-               
+        return count       
+    
+    def read_alignment(self, filename, char_type, feature_type, locus_name, format="fasta", aln_method_name = "ReadDirectly", exclude=[]):
+    
+        if __builtin__.git:
+            import rpgit
+        else:
+            warnings.warn('Version control off')
+            
+        if not any([locus.name == locus_name for locus in self.loci]):
+            raise RuntimeError("Locus %s does not exist"%locus_name)
+        elif not [locus for locus in self.loci if locus.name == locus_name][0].char_type == char_type:
+            raise RuntimeError("%s is not a %s locus"%(locus_name, char_type))
+        elif not [locus for locus in self.loci if locus.name == locus_name][0].feature_type == feature_type:
+            raise RuntimeError("The feature_type %s is not %s"%(locus_name, feature_type))
+            
+        count = 0
+        # start the counter where it stoped the last time we read denovo things
+        for record in self.records:
+            if 'denovo' in record.id:
+                serial = int(record.id[6:])
+                if serial >= count:
+                    count = serial+1
+        # Read the alignment:
+        raw_aln_input = list(AlignIO.read(filename, format))
+        
+        # make records
+        records = []
+        aln_records = []
+        for record in raw_aln_input:
+            if not record.id in exclude:
+                # remove gaps
+                new_record = SeqRecord(seq=Seq(str(record.seq).replace('-','').replace('.','')))
+                aln_record = SeqRecord(seq=Seq(str(record.seq).replace('.','-')))
+                
+                #set alphabet
+                if char_type == 'prot':
+                    new_record.seq.alphabet = IUPAC.protein
+                    aln_record.seq.alphabet = IUPAC.protein
+                    
+                elif char_type == 'dna':
+                    new_record.seq.alphabet = IUPAC.ambiguous_dna
+                    aln_record.seq.alphabet = IUPAC.ambiguous_dna
+                    
+                # set denovo record id
+                new_record.id = 'denovo%i'%count
+                new_record.name = new_record.id
+                
+                # set source and first feature
+                source = SeqFeature(FeatureLocation(0, len(new_record.seq)), type='source', strand=1)
+                source.qualifiers['original_id'] = [record.id]
+                source.qualifiers['original_desc'] = [(' ').join(record.description.split()[1:])]
+                source.qualifiers['feature_id'] = [new_record.id+'_source']
+                feature = SeqFeature(FeatureLocation(0, len(new_record.seq)), type=feature_type, strand=1)
+                feature.qualifiers['feature_id'] = [new_record.id+'_f0']
+                feature.qualifiers['gene'] = [locus_name]
+                feature_seq = feature.extract(new_record.seq)
+                degen = len(feature_seq)
+                if char_type == 'dna':    
+                    for i in ['A','T','G','C','U','a','t','g','c','u']:
+                        degen -= feature_seq.count(i)
+                    feature.qualifiers['GC_content'] = [str(GC(feature_seq))]
+                    feature.qualifiers['nuc_degen_prop'] = [str(float(degen)/len(feature_seq))]
+                    warnings.warn("To get translations, add a feature manually")
+                elif char_type == 'prot': 
+                    degen = 0
+                    for i in ['B', 'X', 'Z', 'b', 'x', 'z']:
+                        degen += feature_seq.count(i)
+                    feature.qualifiers['prot_degen_prop'] = [str(float(degen)/len(feature_seq))]   
+                new_record.features = [source, feature]
+                
+                aln_record.id = 'denovo%i_f0'%count
+                
+                count += 1
+                
+                records.append(new_record)
+                aln_records.append(aln_record)
+            
+        token = "%s@%s"%(locus_name, aln_method_name)
+        
+        if token in self.alignments.keys():
+            warnings.warn("Replacing alignment %s"%token)
+        # need to add the denovo id's inside the alignment    
+        self.alignments[token] = MultipleSeqAlignment(aln_records)
+        self.records += records
+        self.extract_by_locus()
+        
+        if __builtin__.git:
+            import rpgit
+            comment = "Alignment file %s" % (time.asctime())
+            rpgit.gitAdd(filename)
+            cwd = os.getcwd()
+            import fnmatch
+            matches = []
+            for root, dirnames, filenames in os.walk(cwd):
+                for filename in fnmatch.filter(filenames, '*.py'):
+                    matches.append(os.path.join(root, filename))
+                for filename in fnmatch.filter(filenames, '*.ipynb'):
+                    matches.append(os.path.join(root, filename))
+            for match in matches:
+                rpgit.gitAdd(match)
+            rpgit.gitCommit(comment)
+
     def add_feature_to_record(self, record_id, feature_type, location='full', qualifiers={}):
     
         """
@@ -1002,12 +1144,13 @@ class Project:
                 #determine new feature id
                 feature_id = None
                 serials = []
-                for feature in record.features:
-                    if 'feature_id' in feature.qualifiers.keys():
-                        if '_f' in feature.qualifiers['feature_id']:
-                            f = feature.qualifiers['feature_id']
-                            serials.append(int(f.split('_')[1][1:]))
-                serials.sort(reverse = True)
+                if len(record.features) > 0:
+                    for feature in record.features:
+                        if 'feature_id' in feature.qualifiers.keys():
+                            if '_f' in feature.qualifiers['feature_id'][0]:
+                                f = feature.qualifiers['feature_id'][0]
+                                serials.append(int(f.split('_')[1][1:]))
+                    serials.sort(reverse = True)
                 if len(serials) > 0:
                     feature_id = record.id + '_f' + str(serials[0]+1)
                 else:
@@ -1067,6 +1210,7 @@ class Project:
                     feature.qualifiers['prot_degen_prop'] = [str(float(degen)/len(transl))]   
                 
                 record.features.append(feature)
+                return feature_id
 
 
 
@@ -1109,6 +1253,20 @@ class Project:
         """
         
         if isinstance(concatenation_object, Concatenation):
+            # correct characters offending raxml, back up original values
+            meta = concatenation_object.otu_meta
+            self.copy_paste_within_feature(meta, "original_%s"%meta)
+            offensive = ['\t','\r','\n', "'", '"', ',', ' ',
+                         ';', ':', ']','[','(',')','/']
+            for r in self.records:
+                for f in r.features:
+                    if meta in f.qualifiers.keys():
+                        for o in offensive:
+                            if o in f.qualifiers[meta][0]:
+                                print (("found raxml offensive char %s in OTU %s. Replacing with '_ro_'."+
+                                        "Backing up original in the qualifier original_%s.")%(o, f.qualifiers[meta][0], meta))
+                                f.qualifiers[meta][0] = f.qualifiers[meta][0].replace(o,'_ro_')
+            
             seen = []
             for s in self.concatenations:
                 seen.append(s.name)
@@ -1142,6 +1300,13 @@ class Project:
                             not qualifiers_dictionary[meta] in OTU_list):
                             OTU_list.append(qualifiers_dictionary[meta])
                             
+            
+            if False: """This chunck checks for the presence of data
+            in the original records. It is therefore unaware of sequences
+            that were droped during alignment and trimming. It is now replaced by
+            the chunk below, checking for data availability in the trimmed alignments
+            instead.
+            
             # make lists of available feature_ids in each locus
             available_features = {}
             for locus in s.loci:
@@ -1211,9 +1376,11 @@ class Project:
                         elif len(locus_specific_features) > 1:
                             raise RuntimeError(individual + ' is not unique for ' + locus.name)
 
-            # build alignment
-            concat_records = []
-            alignment = []
+            """
+    
+            included_individuals = {} #included_individuals[otu][locus]=feautre_id
+            
+            #Get the correct trimmed alignment tokens
             keys_of_trimmed_alignments_to_use_in_concat = []
             for locus in s.loci:
                 trimmed_aln = None
@@ -1240,11 +1407,84 @@ class Project:
                 else:
                     raise RuntimeError('Could not find trimmed aln for locus '+locus.name+' given the rulls '+str(s.define_trimmed_alns))
             
-            print "%i individuals will be included in the concatenations %s"%(len(included_individuals.keys()), s.name)
+            #print "%i individuals will be included in the concatenations %s"%(len(included_individuals.keys()), s.name)
             
-            if len(included_individuals.keys()) < 4:
-                raise RuntimeError("Concatenation %s has less than 4 OTUs and cannot be analyzed"%s.name)
+            #if len(included_individuals.keys()) < 4:
+            #    raise RuntimeError("Concatenation %s has less than 4 OTUs and cannot be analyzed"%s.name)
+            for otu in OTU_list:
+                otu_features = {}
+                use = True
+                
+                # Check first rule
+                for locus in s.concat_must_have_all_of:
+                    token = [t for t in keys_of_trimmed_alignments_to_use_in_concat if "%s@"%locus in t][0]
+                    feature_ids = [r.id for r in self.trimmed_alignments[token]]
+                    feature_found = False
+                    count = 0
+                    for feature_id in feature_ids:
+                        qualifiers = get_qualifiers_dictionary(self, feature_id)
+                        if meta in qualifiers.keys() and otu == qualifiers[meta]:
+                            count += 1
+                            feature_found = True
+                            otu_features[locus] = feature_id
+                    if count > 1:
+                        raise RuntimeError("%s is not unique in %s"%(otu, locus))
+                    if not feature_found:
+                        use = False
+                        
+                # Check second rule
+                if use:
+                    for group in s.concat_must_have_one_of:
+                        feature_found = False
+                        for locus in group:
+                            token = [t for t in keys_of_trimmed_alignments_to_use_in_concat if "%s@"%locus in t][0]
+                            feature_ids = [r.id for r in self.trimmed_alignments[token]]
+                            count = 0
+                            for feature_id in feature_ids:
+                                qualifiers = get_qualifiers_dictionary(self, feature_id)
+                                if meta in qualifiers.keys() and otu == qualifiers[meta]:
+                                    count += 1
+                                    feature_found = True
+                                    otu_features[locus] = feature_id
+                            if count > 1:
+                                raise RuntimeError("%s is not unique in %s"%(otu, locus))
+                        if not feature_found:
+                            use = False
+                if use:
+                    included_individuals[otu] = otu_features
             
+            # printing a table of the alignment
+            included_indivduals_table = ''
+            loci_names = [l.name for l in s.loci]
+            line = 'OTU'.ljust(30,' ')
+            for name in loci_names:
+                line += name.ljust(20,' ')
+            included_indivduals_table += line+'\n'
+            for otu in included_individuals.keys():
+                line = otu.ljust(30,' ')
+                for locus_name in loci_names:
+                    if locus_name in included_individuals[otu].keys():
+                        line += included_individuals[otu][locus_name].ljust(15,' ')
+                    else:
+                        line += ''.ljust(15,' ')
+                included_indivduals_table += line+'\n'
+            print "Concatenation %s wil have the following data"%s.name
+            print included_indivduals_table
+            
+            # remove partitions with less then 4 sequences
+            for name in loci_names:
+                if len([otu for otu in included_individuals.keys() if name in included_individuals[otu].keys()]) < 4:
+                    print (("Locus %s has less then 4 sequences in concatenation %s and where excluded "+
+                                         "from the concatenation")%(name,s.name))
+                    for key in keys_of_trimmed_alignments_to_use_in_concat:
+                        if name in key:
+                            keys_of_trimmed_alignments_to_use_in_concat.remove(key)
+                            
+                                        
+            
+            # build alignment
+            # concat_records = []
+            alignment = []
             for individual in included_individuals.keys():
                 sequence = ''
                 for key in keys_of_trimmed_alignments_to_use_in_concat:
@@ -1348,25 +1588,66 @@ class Project:
                                 else:
                                     line.append('null')
                             linewriter.writerow(line)
+        
+        if __builtin__.git:
+            import rpgit
+            comment = "Records %s text file from %s" % (format, time.asctime())
+            rpgit.gitAdd(filename)
+            cwd = os.getcwd()
+            import fnmatch
+            matches = []
+            for root, dirnames, filenames in os.walk(cwd):
+                for filename in fnmatch.filter(filenames, '*.py'):
+                    matches.append(os.path.join(root, filename))
+                for filename in fnmatch.filter(filenames, '*.ipynb'):
+                    matches.append(os.path.join(root, filename))
+            for match in matches:
+                rpgit.gitAdd(match)
+            rpgit.gitCommit(comment)
 
     def correct_metadata_from_file(self,csv_file):
         metadata = read_feature_quals_from_tab_csv(csv_file)
+        new_records = []
         for record in self.records:
-            record_corrected_metadata = metadata[record.id]
-            record.annotations['taxonomy'] = metadata[record.id]['taxonomy']
-            for feature in record.features:
-                if feature.type == 'source':
-                    feature.qualifiers = metadata[record.id]['source']
-                else:
-                    feature_id = feature.qualifiers['feature_id']
-                    translation = None
-                    if 'translation' in feature.qualifiers.keys():
-                        translation = feature.qualifiers['translation']
-                    feature.qualifiers = metadata[record.id]['features'][feature_id[0]]
-                    feature.qualifiers['feature_id'] = feature_id
-                    if translation:
-                        feature.qualifiers['translation'] = translation
-                
+            if record.id in metadata.keys():
+                #print 'making new record'
+                new_record = record
+                record_corrected_metadata = metadata[record.id]
+                new_record.annotations['taxonomy'] = metadata[record.id]['taxonomy']
+                for feature in new_record.features:
+                    if feature.type == 'source':
+                        feature.qualifiers = metadata[record.id]['source']
+                    else:
+                        feature_id = feature.qualifiers['feature_id']
+                        translation = None
+                        if 'translation' in feature.qualifiers.keys():
+                            translation = feature.qualifiers['translation']
+                        feature.qualifiers = metadata[record.id]['features'][feature_id[0]]
+                        feature.qualifiers['feature_id'] = feature_id
+                        if translation:
+                            feature.qualifiers['translation'] = translation
+                new_records.append(new_record)
+            else:
+                #print 'using old records'
+                new_records.append(record)
+        
+        self.records = new_records
+        
+        if __builtin__.git:
+            import rpgit
+            comment = "Corrected metadata CSV file from %s" % (time.asctime())
+            rpgit.gitAdd(csv_file)
+            cwd = os.getcwd()
+            import fnmatch
+            matches = []
+            for root, dirnames, filenames in os.walk(cwd):
+                for filename in fnmatch.filter(filenames, '*.py'):
+                    matches.append(os.path.join(root, filename))
+                for filename in fnmatch.filter(filenames, '*.ipynb'):
+                    matches.append(os.path.join(root, filename))
+            for match in matches:
+                rpgit.gitAdd(match)
+            rpgit.gitCommit(comment)
                 
     def if_this_then_that(self, IF_THIS, IN_THIS, THEN_THAT, IN_THAT, mode = 'whole'):
         
@@ -1608,10 +1889,15 @@ class Project:
         for locus in self.loci:
             if not locus.name in locus.aliases:
                 locus.aliases.append(locus.name)
+                locus.aliases.append(locus.name.replace('_',' '))
             records = []
             for record in self.records:
                 for feature in record.features:
-                    if (feature.type == locus.feature_type and
+                    if ((feature.type == locus.feature_type or
+                         # equate CDS and Protein feature types to allow reading protein sequences from 
+                         # a mix of DNA gb files and protein fasta files that were given a Protein feature
+                         # type
+                         (feature.type in ['CDS','Protein'] and locus.feature_type in ['CDS','Protein'])) and
                         
                         (('gene' in feature.qualifiers.keys() and
                           feature.qualifiers['gene'][0] in locus.aliases) 
@@ -1621,9 +1907,18 @@ class Project:
                         
                         ):
                         if locus.char_type == 'dna':
-                            S = feature.extract(record.seq)
+                            if not type(record.seq.alphabet) == IUPAC.IUPACProtein:
+                                S = feature.extract(record.seq)
+                            else:
+                                raise RuntimeError('Trying to read DNA from protein only records')
                         elif locus.char_type == 'prot':
-                            S = Seq(feature.qualifiers['translation'][0], IUPAC.protein)
+                            if not type(record.seq.alphabet) == IUPAC.IUPACProtein:
+                                if 'translation' in feature.qualifiers.keys():
+                                    S = Seq(feature.qualifiers['translation'][0], IUPAC.protein)
+                                else:
+                                    raise RuntimeError('Trying to read protein from DNA records without translation info')
+                            else:
+                                S = feature.extract(record.seq)
                         feature_record = SeqRecord(seq = S, id = feature.qualifiers['feature_id'][0],
                                                    description = '')
                         records.append(feature_record)
@@ -1754,7 +2049,7 @@ class Project:
                         aln_filename = method.id+'_'+locus.name+'.aln'
                         AlignIO.write(align, aln_filename, 'fasta')
                         cds_filename = method.id+'_CDS_in_frame_'+locus.name+'.fasta'
-                        stdout = os.popen('perl '+pal2nal+' '+aln_filename+' '+cds_filename + ' -nostderr').read()
+                        stdout = os.popen(pal2nal+' '+aln_filename+' '+cds_filename + ' -nostderr').read()
                         align = AlignIO.read(StringIO(stdout), "clustal",  alphabet=IUPAC.ambiguous_dna)
                         #from Bio import CodonAlign
                         #codon_aln = CodonAlign.build(align, method.CDS_in_frame[locus.name])
@@ -1768,7 +2063,7 @@ class Project:
                         line = 'Alignment %s has less than 4 sequences and will be dropped'%(locus.name+'@'+method.method_name)
                         print line
                         summary += line+'\n'
-                    elif num_undeter > 0:
+                    elif num_undeter[0] > 0:
                         line = 'Alignment %s has undetermined sequences and will be dropped'%(locus.name+'@'+method.method_name)
                         print line
                         summary += line+'\n'
@@ -1788,24 +2083,184 @@ class Project:
 
 
 
-    def write_alns(self, format = 'fasta'):
+    def write_alns(self, id=['feature_id'], format = 'fasta'):
+        filenames = []
         if len(self.alignments.keys()) == 0:
             raise IOError('Align the records first')
         else:
             for key in self.alignments:
-                AlignIO.write(self.alignments[key], key+'_aln.'+format, format)
+                aln = self.alignments[key]
+                records = []
+                for s in aln:
+                    qualifiers = get_qualifiers_dictionary(self, s.id)
+                    new_id = ""
+                    for i in id:
+                        if i in qualifiers.keys():
+                            new_id += qualifiers[i]+'_'
+                    if new_id == "":
+                        new_id = s.id
+                    else:
+                        new_id = new_id[:-1]
+                    records.append(SeqRecord(seq=s.seq, id=new_id))
+                SeqIO.write(records, key+'_aln.'+format, format)
+                filenames.append(key+'_aln.'+format)
+        return filenames
 
 
 
-    def write_trimmed_alns(self, format = 'fasta'):
+    def write_trimmed_alns(self, id=['feature_id'], format = 'fasta'):
+        filenames = []
         if len(self.trimmed_alignments.keys()) == 0:
             raise IOError('Align and trimmed the records first')
         else:
             for key in self.trimmed_alignments.keys():
-                AlignIO.write(self.trimmed_alignments[key], key+'_trimmed_aln.'+format, format)
+                aln = self.trimmed_alignments[key]
+                records = []
+                for s in aln:
+                    qualifiers = get_qualifiers_dictionary(self, s.id)
+                    new_id = ""
+                    for i in id:
+                        if i in qualifiers.keys():
+                            new_id += qualifiers[i]+'_'
+                    if new_id == "":
+                        new_id = s.id
+                    else:
+                        new_id = new_id[:-1]
+                    records.append(SeqRecord(seq=s.seq, id=new_id))
+                SeqIO.write(records, key+'_trimmed_aln.'+format, format)
+                filenames.append(key+'_trimmed_aln.'+format)
+        return filenames
 
-
-
+    def show_aln(self, token, id=['feature_id']):
+        aln_obj=None
+        if token in self.alignments.keys():
+            aln_obj = self.alignments[token]
+        elif token in self.trimmed_alignments.keys():
+            aln_obj = self.trimmed_alignments[token]
+        locus_name = token.split('@')[0]
+        char_type = [locus.char_type for locus in self.loci if locus.name == locus_name][0]
+        
+        records = []
+        for s in aln_obj:
+            qualifiers = get_qualifiers_dictionary(self, s.id)
+            new_id = ""
+            for i in id:
+                if i in qualifiers.keys():
+                    new_id += qualifiers[i]+'_'
+            if new_id == "":
+                new_id = s.id
+            else:
+                new_id = new_id[:-1]
+            records.append(SeqRecord(seq=s.seq, id=new_id))
+            
+        title_length = max([len(r.id) for r in records])+2
+        
+        # colors
+        dna_colors = {'a':'green',
+                      'A':'green',
+                      'T':'red',
+                      't':'red',
+                      'U':'red',
+                      'u':'red',
+                      'g':'lightgray',
+                      'G':'lightgray',
+                      'c':'blue',
+                      'C':'blue'
+                      }
+        protein_colors = {'R':'blueviolet',
+                          'r':'blueviolet',
+                          
+                          'K':'cornflowerblue',
+                          'k':'cornflowerblue',
+                          
+                          'E':'red',
+                          'e':'red',
+                          
+                          'D':'crimson',
+                          'd':'crimson',
+                          
+                          'I':'gold',
+                          'i':'gold',
+                          
+                          'L':'yellow',
+                          'l':'yellow',
+                          
+                          'V':'moccasin',
+                          'v':'moccasin',
+                          
+                          'A':'lemonchiffon',
+                          'a':'lemonchiffon',
+                          
+                          'C':'palegreen',
+                          'c':'palegreen',
+                          
+                          'H':'paleturquoise',
+                          'h':'paleturquoise',
+                          
+                          'M':'hotpink',
+                          'm':'hotpink',
+                          
+                          'N':'pink',
+                          'n':'pink',
+                          
+                          'Q':'yellow',
+                          'q':'yellow',
+                          
+                          'F':'darkseagreen',
+                          'f':'darkseagreen',
+                          
+                          'Y':'darkcyan',
+                          'y':'darkcyan',
+                          
+                          'W':'steelblue',
+                          'w':'steelblue',
+                          
+                          
+                          'S':'thistle',
+                          's':'thistle',
+                          
+                          'T':'lavender',
+                          't':'lavender',
+                          
+                          'G':'darkgray',
+                          'g':'darkgray',
+                          
+                          'P':'gainsboro',
+                          'p':'gainsboro',
+                          }
+        colors = None
+        if char_type == 'dna':
+            colors = dna_colors
+        elif char_type == 'prot':
+            colors = protein_colors
+        linelength = (len(records[0].seq)+len(records[0].id)+3)*10
+        html_string = '<html><head>'
+        token_list = token.split('@')
+        html_string +='<h1>%s </h1>\n'%token_list[0]
+        if len(token_list) > 1:
+            html_string +='<h1>%s </h1>\n'%token_list[1]
+        if len(token_list) > 2:
+            html_string +='<h1>%s </h1>\n'%token_list[2]
+        html_string +='<br></head>\n'
+        html_string += '<body><pre><font face="Courier New">\n'
+        for r in records:
+            html_string += r.id.ljust(title_length, '.')
+            for p in str(r.seq):
+                c = 'white'
+                if p in colors.keys():
+                    c = colors[p]
+                html_string += '<font style="BACKGROUND-COLOR: %s">%s</font>'%(c, p)
+            html_string += "<br>"
+        html_string +=  '</font></pre></body></html>' 
+        
+        import webbrowser
+        path = os.path.abspath("%s.html"%token)
+        url = 'file://' + path
+        with open(path, 'w') as f:
+            f.write(html_string)
+        webbrowser.open_new_tab(url)
+        
+    
     def tree(self, raxml_methods, bpcomp='default'):
         # to do: determine the program used and the resulting expected tree file name
         
@@ -2142,10 +2597,16 @@ class Project:
                         line = 'Alignment %s has less than 4 sequences and will be dropped'%aln
                         print line
                         summary += line+'\n'
-                    elif num_undeter > 0:
-                        line = 'Alignment %s has undetermined sequences and will be dropped'%aln
+                    elif num_undeter[0] > 0:
+                        line = 'Alignment %s has undetermined sequences which will be dropped: %s'%(aln,num_undeter[1])
                         print line
                         summary += line+'\n'
+                        records_wo_undeter = []
+                        for record in align:
+                            if not record.id in num_undeter[1]:
+                                records_wo_undeter.append(record)
+                        align =  MultipleSeqAlignment(records_wo_undeter)
+                        self.trimmed_alignments[aln] = align
                     elif num_collapsed_aln_seqs < 4:
                         line = 'Alignment %s has less than 4 unique sequences and will be dropped'%aln
                         print line
@@ -2154,12 +2615,152 @@ class Project:
                         self.trimmed_alignments[aln] = align
                     self.aln_summaries.append(summary)
             for file_name in os.listdir(os.curdir):
-                        if m.id.partition('_')[0] in file_name:
-                            os.remove(file_name)
+                if m.id.partition('_')[0] in file_name:
+                    os.remove(file_name)
             m.timeit.append(time.time())
             m.timeit.append(m.timeit[2]-m.timeit[1])
             self.used_methods.append(m)
 
+
+    def report_seq_stats(self):        
+        if len(self.records_by_locus.keys())>0:
+
+            # This will make a list of seq length for each locus. Seq length are calced
+            # using the record.seq in 'pj.records_by_locus'. 'pj.records_by_locus is a
+            # dict with loci names as keys, and lists of SeqReocrd objects as values
+            lengths_dict = {}
+            for locus_name in self.records_by_locus.keys():
+                lengths_dict[locus_name] = []
+                for record in self.records_by_locus[locus_name]:
+                    lengths_dict[locus_name].append(len(record.seq))
+                    
+            print "Distribution of sequence lengths".title()
+            draw_boxplot(lengths_dict, 'Seq length (bp)', 'inline')
+            
+            
+            for stat in ('GC_content', 'nuc_degen_prop', 'prot_degen_prop'):
+                title = 'Distribution of sequence statistic \"'+stat+'\"'
+                print title.title()
+                # This will make a dict with loci as keys and a list of stat values as
+                # dict values.
+                stat_dict = {}
+                ylabel = 'GC ontent (%)'
+                if not stat == 'GC_content':
+                    ylabel = 'Ambiguous positions (prop)'
+                for locus_name in self.records_by_locus.keys():
+                    stat_dict[locus_name] = []
+                    for i in self.records_by_locus[locus_name]:
+                        for record in self.records:
+                            for feature in record.features:
+                                if feature.qualifiers['feature_id'][0] == i.id:
+                                    if stat in feature.qualifiers.keys():
+                                        stat_dict[locus_name].append(float(feature.qualifiers[stat][0]))
+                
+                draw_boxplot(stat_dict, ylabel, 'inline')
+                
+    ##################################               
+    # Project methods to fetch objects
+    ##################################
+    
+    def ft(self, token):
+        
+        """
+        Will fetch the tree object which has the token in 
+        its key, as long as there is only one
+        """
+        
+        # check how many tree keys match the token
+        keys = [key for key in self.trees.keys() if token in key]
+        if len(keys) > 1:
+            raise IOError("The token %s was found in more then one tree key: %s"
+                           %(token, str(keys)))
+        elif len(keys) == 0:
+            raise IOError("The token %s was not found in any tree key"
+                           %token)
+        elif len(keys) == 1:
+            print "returning tree object %s"%keys[0]
+            return self.trees[keys[0]][0]    
+        
+        
+        
+    def fa(self, token):
+        
+        """
+        Will fetch the alignment object which has the token in 
+        its key, as long as there is only one
+        """
+        
+        # check how many aln keys match the token
+        keys = [key for key in self.alignments.keys() if token in key]
+        if len(keys) > 1:
+            raise IOError("The token %s was found in more then one alignment key: %s"
+                          %(token, str(keys)))
+        elif len(keys) == 0:
+            raise IOError("The token %s was not found in any alignment key"
+                          %token)
+        elif len(keys) == 1:
+            print "returning alignment object %s"%keys[0]
+            return self.alignments[keys[0]]        
+        
+        
+    def fta(self, token):
+        
+        """
+        Will fetch the trimmed alignment object which has the token in 
+        its key, as long as there is only one
+        """
+        
+        # check how many trimmed aln keys match the token
+        keys = [key for key in self.trimmed_alignments.keys() if token in key]
+        if len(keys) > 1:
+            raise IOError("The token %s was found in more then one trimmed alignment key: %s"
+                          %(token, str(keys)))
+        elif len(keys) == 0:
+            raise IOError("The token %s was not found in any trimmed alignment key"
+                          %token)
+        elif len(keys) == 1:
+            print "returning trimmed alignment object %s"%keys[0]
+            return self.trimmed_alignments[keys[0]]            
+        
+        
+    def fr(self, locus_name, filter=None):
+        
+        """
+        Will fetch the record objects of the specified locus, 
+        as long as there is at least one.
+        filter should be a list of lists. Every (sub)list is
+        a pair of qualifier and value. If filter is specified,
+        only records that have all the specified values in the
+        specified qualifiers will be kept.
+        """
+        
+        # check how many record keys match the token
+        keys = [key for key in self.records_by_locus.keys() if locus_name in key]
+        if len(keys) > 1:
+            raise IOError("The locus name %s fits more then one locus: %s"
+                          %(locus_name, str(keys)))
+        elif len(keys) == 0:
+            raise  IOError("The locus %s was not found"
+                           %locus_name)
+        elif len(keys) == 1:
+            records = []
+            if filter:
+                for r in self.records_by_locus[keys[0]]:
+                    qualifiers = get_qualifiers_dictionary(self, r.id)
+                    get = True
+                    for f in filter:
+                        if not (f[0] in qualifiers.keys() and qualifiers[f[0]] == f[1]):
+                            get = False
+                    if get:
+                        records.append(r) 
+            else:
+                for r in self.records_by_locus[keys[0]]:
+                    records.append(r)
+            print "returning records list of locus %s and filter %s"%(keys[0], str(filter))
+            return records
+        
+   
+                
 ##############################################################################################
 class AlnConf:
 ##############################################################################################
@@ -2174,9 +2775,9 @@ class AlnConf:
     #                                     cline_args=dict())
     """
     
-    def __init__(self, pj, method_name='MafftLinsi', CDSAlign=True, program_name='mafft',
+    def __init__(self, pj, method_name='mafftDefault', CDSAlign=True, program_name='mafft',
                  cmd='mafft', loci='all',
-                 cline_args=dict(localpair=True, maxiterate=1000)):
+                 cline_args=dict()):
         self.id = str(random.randint(10000,99999))+str(time.time())
         self.method_name=method_name
         self.CDSAlign=CDSAlign
@@ -2189,11 +2790,15 @@ class AlnConf:
                     if locus_name == locus.name:
                         self.loci.append(locus)
         mutable_loci_list = []
+        removed_loci = []
         for locus in self.loci: 
             if len(pj.records_by_locus[locus.name]) < 4:
-                print "%s have less than 4 sequences and will be dropped from this conf object. Don't use it in a concatenation"%locus.name
+                removed_loci.append(locus.name)
+                #print "%s have less than 4 sequences and will be dropped from this conf object. Don't use it in a concatenation"%locus.name
             else:
                 mutable_loci_list.append(locus)
+        if len(removed_loci) > 0:
+            print "These loci have less than 4 sequences and will be dropped from this conf object. Don't use then in a concatenation:\n%s\n\n"%removed_loci
         self.loci = mutable_loci_list
         self.CDS_proteins = {}
         self.CDS_in_frame = {}
@@ -2223,7 +2828,7 @@ class AlnConf:
                 self.CDS_in_frame[locus.name] = []
                 for record in pj.records:
                     for feature in record.features:
-                        if (not feature.type == 'source' and 'gene' in feature.qualifiers.keys() and
+                        if (feature.type == 'CDS' and 'gene' in feature.qualifiers.keys() and
                             feature.qualifiers['gene'][0] in locus.aliases):
                             S = feature.extract(record.seq)
                             # Make in-frame CDS input file seq start in frame
@@ -2237,6 +2842,9 @@ class AlnConf:
                             elif len(S)%3 == 2:
                                 S = S[:-2]  
                             # make protein input file seq
+                            if not 'translation' in feature.qualifiers.keys():
+                                raise IOError("Feature %s has no 'translation' qualifier"%
+                                              feature.qualifiers['feature_id'][0])
                             P = Seq(feature.qualifiers['translation'][0], IUPAC.protein)
                             # Remove 3' positions that are based on partial codons
                             while len(P)*3 > len(S):
@@ -2323,6 +2931,8 @@ class TrimalConf:
     def __init__(self, pj, method_name='gappyout', program_name='trimal',
                  cmd='default', alns='all', trimal_commands=dict(gappyout=True)):
         
+        if len(pj.alignments) == 0:
+            raise RuntimeError("No sequence alignments found")
         self.id = str(random.randint(10000,99999))+str(time.time())
         self.method_name=method_name
         self.program_name=program_name
@@ -2411,20 +3021,21 @@ def make_raxml_partfile(tree_method, pj, trimmed_alignment_name):
             if locus.name == trm_aln.partition('@')[0]:
                 part_name = trm_aln
         if not part_name:
-            raise RuntimeError('There is no trimmed alignment for locus '+locus.name+' in concatenation '+concatenation.name)
-        part_length = concatenation.used_trimmed_alns[part_name]
-        if locus.char_type == 'prot':
-            m = None
-            if isinstance(tree_method.matrix,dict):
-                m = tree_method.matrix[locus.name]
-            elif isinstance(tree_method.matrix,str):
-                m = tree_method.matrix
-            else:
-                #todo write error
-                pass
-            model.append([m,part_name,part_length])
-        elif locus.char_type == 'dna':
-            model.append(['DNA',part_name,part_length])
+            warnings.warn('There is no trimmed alignment for locus '+locus.name+' in concatenation '+concatenation.name)
+        else:
+            part_length = concatenation.used_trimmed_alns[part_name]
+            if locus.char_type == 'prot':
+                m = None
+                if isinstance(tree_method.matrix,dict):
+                    m = tree_method.matrix[locus.name]
+                elif isinstance(tree_method.matrix,str):
+                    m = tree_method.matrix
+                else:
+                    #todo write error
+                    pass
+                model.append([m,part_name,part_length])
+            elif locus.char_type == 'dna':
+                model.append(['DNA',part_name,part_length])
                     
     # make partition file
                     
@@ -2540,13 +3151,18 @@ def write_raxml_clines(tree_method, pj, trimmed_alignment_name):
                 presets[preset][cline] = dict({'-q': partfile}, **presets[preset][cline])               
     return presets[tree_method.preset] 
 
-
+##############################################################################################
 class RaxmlConf:
-    
+##############################################################################################
     
     def __init__(self, pj, method_name='fa', program_name='raxmlHPC-PTHREADS-SSE3',
                  cmd='default', preset = 'fa', alns='all', model='GAMMA', matrix='JTT', threads=4,
                  cline_args={}):
+        
+        
+        if len(pj.trimmed_alignments) == 0:
+            raise RuntimeError("No trimmed sequence alignments found")
+            
         self.id = str(random.randint(10000,99999))+str(time.time())
         self.method_name=method_name
         self.program_name=program_name
@@ -2584,17 +3200,16 @@ class RaxmlConf:
 from pylab import *
 import random
 
-def draw_boxplot(dictionary, y_axis_label, figs_folder, scale): #'locus':[values]
+def draw_boxplot(dictionary, y_axis_label, figs_folder): #'locus':[values]
     import numpy as np
     import matplotlib.pyplot as plt
     items = dictionary.items()
     items.sort()
-    
     data = [locus[1] for locus in items]
         
     fig, ax1 = plt.subplots()
-    fig.figsize = (scale, 3)
-    #plt.subplots_adjust(left=0.075, right=0.95, top=0.9, bottom=0.25)
+    fig.set_size_inches(0.3*len(data),10)
+    plt.subplots_adjust(top=0.99, bottom=0.3)
 
     #bp = plt.boxplot(data, widths=0.75, patch_artist=True)
     bp = plt.boxplot(data, patch_artist=True)
@@ -2634,14 +3249,18 @@ def draw_boxplot(dictionary, y_axis_label, figs_folder, scale): #'locus':[values
     #ax1.set_title('Sequence length distribution per locus\n', size=18)
     
     xlabels = [locus[0] for locus in items]
-    xticks(range(len(data)+1)[1:], xlabels, size=14, rotation='vertical')
+    
+    xticks(range(1,len(data)+1), xlabels, size=14, rotation='vertical')
     #subplots_adjust(left=0.3, bottom=0.8)
     
     ax1.set_ylabel(y_axis_label, size=18)
     
     name = str(random.randint(1000,2000))
-    fig.savefig(figs_folder + '/' + name +'.png')
-    close('all')
+    if figs_folder=='inline':
+        fig.show()
+    else:
+        fig.savefig(figs_folder + '/' + name +'.png')
+        close('all')
     return figs_folder + '/' + name+'.png'
     
 #################################################################################
@@ -2673,10 +3292,10 @@ def report_methods(pj, figs_folder, output_directory):
         curframe = inspect.currentframe()
         calframe = inspect.getouterframes(curframe, 2)
         callername = calframe[1][3]
-
+        print "reporter was called by "+str(callername)
         # Here we manage mkdir and error raising for preexisting 
         # output_directory, based of the caller function
-        if os.path.isdir(output_directory) and callername != 'publish':
+        if os.path.isdir(output_directory) and str(callername) != 'publish':
             raise RuntimeError('%s already exists'%output_directory) 
         else:
             # This will make output_directory if it doesnt exist and
@@ -2710,9 +3329,16 @@ def report_methods(pj, figs_folder, output_directory):
 
         
         #############################  section 1:   DATA  #######################
+        
+        if pj.user:
+            report_lines += ['<h2>','User Info','</h2>', '']
+            for item in pj.user:
+                report_lines += ['<strong>%s: </strong>'%item[0], str(item[1])]
+            report_lines += ['']
+        
         report_lines += ['<h2>','Data','</h2>', '']
         
-        
+        print "now printing species table"
         # Species over loci table
         #------------------------------------------------------------------------
         title = 'species representation in sequence data'.title()
@@ -2749,7 +3375,7 @@ def report_methods(pj, figs_folder, output_directory):
         
         os.remove(outfile_name)
         
-                
+        print "now making sequence statistics plots"        
         # Sequence statistic plots
         #------------------------------------------------------------------------
         title = 'Sequence statistic plots'.title()
@@ -2773,7 +3399,7 @@ def report_methods(pj, figs_folder, output_directory):
             
             # This draws a box plot of sequence length distributions and puts a png in 
             # the 'files' directory.
-            fig_filename = draw_boxplot(lengths_dict, 'Seq length (bp)', '%s/files'%output_directory, scale)
+            fig_filename = draw_boxplot(lengths_dict, 'Seq length (bp)', '%s/files'%output_directory)
             
             
             # Distribution of sequence lengths
@@ -2787,7 +3413,7 @@ def report_methods(pj, figs_folder, output_directory):
             if os.path.isfile(fig_filename):
                 #data_uri = open(fig_filename, 'rb').read().encode('base64').replace('\n', '')
                 #img_tag = '<img height=400 width='+scale+' src="data:image/png;base64,{0}">'.format(data_uri)
-                img_tag = '<img height=400 src="%s">'%(fig_filename.partition('/')[-1])
+                img_tag = '<img src="%s">'%(fig_filename.partition('/')[-1])
                 report_lines.append(img_tag)
                 #os.remove(fig_filename)
             
@@ -2813,7 +3439,7 @@ def report_methods(pj, figs_folder, output_directory):
                                         stat_dict[locus_name].append(float(feature.qualifiers[stat][0]))
                 
                 # This will make the boxplot png and will put in in the /files subdirectory
-                fig_filename = draw_boxplot(stat_dict, ylabel, '%s/files'%output_directory, scale)
+                fig_filename = draw_boxplot(stat_dict, ylabel, '%s/files'%output_directory)
                 
                 # Distribution of stat
                 #---------------------------------------------------------------------
@@ -2824,11 +3450,12 @@ def report_methods(pj, figs_folder, output_directory):
                 # making an embeded image
                 if os.path.isfile(fig_filename):
                     #data_uri = open(fig_filename, 'rb').read().encode('base64').replace('\n', '')
-                    img_tag = '<img height=400 src="%s">'%(fig_filename.partition('/')[-1])
+                    img_tag = '<img src="%s">'%(fig_filename.partition('/')[-1])
                     #img_tag = '<img height=400 width='+scale+' src="data:image/png;base64,{0}">'.format(data_uri)
                     report_lines.append(img_tag)
                     #os.remove(fig_filename)
                 
+        print "now reporting concatenations"
         # Description of data concatenations
         #------------------------------------------------------------------------
         title = 'Description of data concatenations'.title()
@@ -2926,6 +3553,7 @@ def report_methods(pj, figs_folder, output_directory):
         # them back to 'Conf' objects that can be rerun.
         report_lines += ['', '<h2>','Methods','</h2>', '']
         
+        print "now reporting methods"
         for method in pj.used_methods:
             # This will print list representations of the 'Conf' objects
             if isinstance(method,list) and(method[0] == 'AlnConf' or method[0] == 'RaxmlConf' or method[0] == 'TrimalConf'):
@@ -3005,7 +3633,7 @@ def report_methods(pj, figs_folder, output_directory):
         #############################  section 3:   RESULTS  #######################
         
         report_lines += ['', '<h2>','Results','</h2>', '']
-        
+        print "now reporting alignment statistics"
         # Global alignmnet statistics
         #------------------------------------------------------------------------
         title = 'Global alignmnet statistics'.title()
@@ -3014,10 +3642,37 @@ def report_methods(pj, figs_folder, output_directory):
         
         # This prints things like num of unique seqs and num of parsimony informative
         # cloumns. Takes the info from 'pj.aln_summaries' which is a list of strings.
+        # Alignment length: 1566
+        #Number of rows: 94
+        #Unique sequences: 87
+        #Average gap prop.: 0.488445
+        #Variable columns: 1045
+        #Parsimony informative: 402
+        #Undetermined sequences: 0
+        
+        
         if len(pj.aln_summaries)>0:
+            report_lines += [('<pre>Name=Alignment name\n'+
+                              'NumPos=Alignment length\n'+
+                              'NumSeq=Number of sequences\n'+
+                              'Unique=Number of unique sequences\n'+
+                              'GapProp=Average gap proportion\n'+
+                              'VarCols=Total variable positions\n'+
+                              'ParsInf=Parsimony informative positions\n'+
+                              'UnSeqs=Completely undetermined sequences (only gaps)\n</pre>')]
+            T = [['Name','NumPos','NumSeq','Unique','GapProp','VarCols','ParsInf','UnSeqs']]
+            comments = []
             for summary in pj.aln_summaries:
-                report_lines += ('<h4>', summary.splitlines()[0], '</h4>', '')
-                report_lines += ['',summary.partition('\n')[-1],'']
+                line = []
+                for i in summary.splitlines():
+                    try:
+                        line.append(i.split(': ')[1])
+                    except:
+                        comments.append(i)
+                T.append(line)
+            report_lines += ['',
+                             HTML.table(T[1:], header_row=T[0]),
+                             '','<pre>']+comments+['</pre>']
         else:
             report_lines += ['','No sequence alignments in this Project','']
                 
@@ -3083,6 +3738,7 @@ def report_methods(pj, figs_folder, output_directory):
         else:
             report_lines += ['No trimmed alignments in this project','']
         
+        print "making RF matrix"
         title = 'Robinson-Foulds distances'.title()
         report_lines += ('<h3>', title, '</h3>', '')
         
@@ -3108,7 +3764,7 @@ def report_methods(pj, figs_folder, output_directory):
 
                 
         #############################  section 4:   TREES  #######################
-        
+        print "reporting trees"
         report_lines += ['', '<h2>','Trees','</h2>', '']
         
         for tree in pj.trees.keys():
@@ -3134,6 +3790,7 @@ def report_methods(pj, figs_folder, output_directory):
                 #img_tag = '<img width=500 src="data:image/png;base64,{0}">'.format(data_uri)
                 img_tag = '<img width=500 src="%s">'%(dest.partition('/')[-1])
                 report_lines.append(img_tag)
+
                 
         report_lines.append('</body>')
         report_lines.append('</html>')
@@ -3171,7 +3828,8 @@ def unpickle_pj(pickle_file_name):
         pickle_handle = open(pickle_file_name, 'rb')
         pkl_pj = pickle.pickle.load(pickle_handle)
         new_pj = Project(pkl_pj.loci)
-        attr_names = ['alignments',
+        attr_names = ['aln_summaries',
+                      'alignments',
                       'concatenations',
                       'records',
                       'records_by_locus',
@@ -3225,6 +3883,7 @@ def publish(pj, folder_name, figures_folder):
     else:
         folder = folder_name
         zip_file = folder_name + '.zip'
+    print "checking if file exists"
     if os.path.exists(folder) or os.path.exists(zip_file):
         raise IOError(folder_name + ' already exists')
     
@@ -3232,7 +3891,8 @@ def publish(pj, folder_name, figures_folder):
     pj.write(folder+'/tree_and_alns.nexml','nexml')
     pj.write(folder+'/sequences_and_metadata.gb','genbank')
     report = open(folder+'/report.html','wt')
-    for line in report_methods(pj, figures_folder, folder_name):
+    lines = report_methods(pj, figures_folder, folder_name)
+    for line in lines:
         report.write(line + '\n')
     report.close()
 
@@ -3244,12 +3904,13 @@ def publish(pj, folder_name, figures_folder):
     #                 folder+'/'+pj.trees[tree][0].get_leaves()[0].tree_method_id+'.png')
             
          
+    print "pickling"
     pickle_name = time.strftime("%a_%d_%b_%Y_%X", time.gmtime())+'.pkl'
     pickle_pj(pj, folder + '/' + pickle_name)
 
     
     import zipfile, shutil
-    
+    print "archiving"
     zf = zipfile.ZipFile(zip_file, "w")
     for dirname, subdirs, files in os.walk(folder):
         zf.write(dirname)
@@ -3257,6 +3918,7 @@ def publish(pj, folder_name, figures_folder):
             zf.write(os.path.join(dirname, filename))
     zf.close()
     shutil.rmtree(folder)
+    print "report ready"
     
 def calc_rf(pj, figs_folder):
     meta = 'feature_id'
@@ -3288,7 +3950,8 @@ def calc_rf(pj, figs_folder):
     
     row_labels = [str(i) for i in range(len(trees))]
     column_labels = row_labels
-    legend = ['#'.ljust(10,' ')+'LOCUS'.ljust(20,' ')+'ALIGNMENT METHOD'.ljust(20,' ')+'TRIMMING METHOD'.ljust(20,' ')+'TREE METHOD'.ljust(20,' ')]
+    legend = ['#'.ljust(10,' ')+'LOCUS'.ljust(20,' ')+'ALIGNMENT METHOD'.ljust(20,' ')+
+              'TRIMMING METHOD'.ljust(20,' ')+'TREE METHOD'.ljust(20,' ')]
     for i in trees:
         line = str(trees.index(i)).ljust(10,' ')
         for val in i.split('@'):
@@ -3381,6 +4044,24 @@ def draw_trimal_scc(pj, num_col, figs_folder, trimmed=False, alg = '-scc'):
     fig.savefig(figs_folder + '/' + figname +'.png')
     plt.close('all')
     return figs_folder + '/' + figname+'.png'
+
+def view_csv_as_table(csv_filename, delimiter, quotechar='|'):
+    with open(csv_filename, 'rb') as csvfile:
+        sp_vs_lc = list(csv.reader(csvfile, delimiter=delimiter, quotechar=quotechar))
+        field_sizes = []
+        for i in range(len(sp_vs_lc[0])):
+            lengths = []
+            for row in sp_vs_lc:
+                lengths.append(len(row[i]))
+            field_sizes.append(max(lengths))
+        for row in sp_vs_lc:
+            string = ''
+            for i in range(len(row)):
+                string += row[i].ljust(field_sizes[i]+3)
+            print string
+            
+
+    
 
 if __name__ == "__main__":
     import doctest
