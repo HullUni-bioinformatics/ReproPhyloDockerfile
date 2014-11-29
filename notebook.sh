@@ -13,5 +13,6 @@ fi
 HASH=$(python -c "from IPython.lib import passwd; print(passwd('${PASSWORD}'))")
 unset PASSWORD
 
+git config --global user.email "reprophylo@rpnotebook.container"
 
-ipython notebook --no-browser --port 8888 --ip=* --certfile=$PEM_FILE --NotebookApp.password="$HASH" #--pylab inline
+ipython notebook --no-browser --port 8888 --ip=* --certfile=$PEM_FILE --NotebookApp.password="$HASH" --pylab inline --no-mathjax
