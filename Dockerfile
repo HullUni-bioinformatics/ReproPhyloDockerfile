@@ -5,8 +5,8 @@ MAINTAINER Amir Szitenberg <a.szitenberg@hull.ac.uk>
  
 # Make sure apt is up to date
 RUN apt-get update
-RUN apt-get update -y --fix-missing
 RUN apt-get upgrade -y
+RUN apt-get update -y --fix-missing
  
 # Not essential, but wise to set the lang
 RUN apt-get install -y language-pack-en
@@ -43,6 +43,7 @@ RUN pip install -q cloud
 RUN pip install pandas
 
 # matplotlib
+RUN apt-get update -y --fix-missing
 RUN apt-get build-dep python-matplotlib -y
 RUN apt-get install python-matplotlib -y
 

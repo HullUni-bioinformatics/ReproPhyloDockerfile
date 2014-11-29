@@ -42,6 +42,7 @@ RUN pip install -q cloud
 RUN pip install pandas
 
 # matplotlib
+RUN apt-get update -y --fix-missing
 RUN apt-get build-dep python-matplotlib -y
 RUN apt-get install python-matplotlib -y
 
