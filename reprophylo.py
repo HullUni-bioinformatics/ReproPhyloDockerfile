@@ -830,14 +830,22 @@ class Project:
         self.trees = {}
         self.used_methods = []
         self.sets = {}
-        self.defaults = {'raxmlHPC': 'raxmlHPC-PTHREADS-SSE3',
+        
+        # check if called by base_reprophylo
+        curframe = inspect.currentframe()
+        calframe = inspect.getouterframes(curframe, 2)
+        callername = calframe[1][3]
+        programspath = ''
+        if str(callername) == 'make_project':
+            programspath = "%s/galaxy-dist/tools/reprophylo/programs/"%os.environ['HOME']
+        self.defaults = {'raxmlHPC': path+'raxmlHPC-PTHREADS-SSE3',
                          'mafft': 'mafft',
-                         'muscle': 'muscle',
-                         'trimal': 'trimal',
-                         'pb': 'pb',
-                         'bpcomp': 'bpcomp',
-                         'tracecomp': 'tracecomp',
-                         'pal2nal': 'pal2nal.pl'}
+                         'muscle': path+'muscle',
+                         'trimal': path+'trimal',
+                         'pb': path+'pb',
+                         'bpcomp': path+'bpcomp',
+                         'tracecomp': path+'tracecomp',
+                         'pal2nal': path+'pal2nal.pl'}
         seen = []
         if isinstance(loci,list):
             for locus in loci:
@@ -2234,14 +2242,7 @@ class Project:
         elif char_type == 'prot':
             colors = protein_colors
         linelength = (len(records[0].seq)+len(records[0].id)+3)*10
-        html_string = '<html><head>'
-        token_list = token.split('@')
-        html_string +='<h1>%s </h1>\n'%token_list[0]
-        if len(token_list) > 1:
-            html_string +='<h1>%s </h1>\n'%token_list[1]
-        if len(token_list) > 2:
-            html_string +='<h1>%s </h1>\n'%token_list[2]
-        html_string +='<br></head>\n'
+        html_string = '<html><head></head>\n'
         html_string += '<body><pre><font face="Courier New">\n'
         for r in records:
             html_string += r.id.ljust(title_length, '.')
@@ -2798,7 +2799,7 @@ class AlnConf:
             else:
                 mutable_loci_list.append(locus)
         if len(removed_loci) > 0:
-            print "These loci have less than 4 sequences and will be dropped from this conf object. Don't use then in a concatenation:\n%s\n\n"%removed_loci
+            print "These loci have less than 4 sequences and will be dropped from this conf object. Don't use them in a concatenation:\n%s\n\n"%removed_loci
         self.loci = mutable_loci_list
         self.CDS_proteins = {}
         self.CDS_in_frame = {}
@@ -3984,6 +3985,9 @@ def draw_trimal_scc(pj, num_col, figs_folder, trimmed=False, alg = '-scc'):
     import random, os
     from Bio import AlignIO
     
+    programpath = ''
+    #programpath = "%s/galaxy-dist/tools/reprophylo/programs/"%os.environ['HOME']
+    
     # get the alignment objects
     #-------------------------#
     alignments = pj.alignments.items()
@@ -4012,8 +4016,15 @@ def draw_trimal_scc(pj, num_col, figs_folder, trimmed=False, alg = '-scc'):
         name = str(random.randint(1000,2000))+'_'+aln_name+'_for_trimal_graph.fasta'
         AlignIO.write(aln_obj, name, 'fasta')
         stderr = open('stderr','wt')
-        #stdout = os.popen('trimal '+alg+' -in '+name)#.read()
-        stdout = sub.Popen("trimal "+alg+" -in " + name,
+        # check if called by base_reprophylo
+        curframe = inspect.currentframe()
+        calframe = inspect.getouterframes(curframe, 2)
+        callername = calframe[1][3]
+        programspath = ''
+        if str(callername) == 'make_project':
+            programspath = "%s/galaxy-dist/tools/reprophylo/programs/"%os.environ['HOME']
+        #stdout = os.popen(programpath+'trimal '+alg+' -in '+name)#.read()
+        stdout = sub.Popen(programpath+"trimal "+alg+" -in " + name,
                        shell=True, stdout=sub.PIPE, stderr=stderr).stdout
         stderr.close()
         var = pd.read_table(stdout, sep='\t+', skiprows=3, engine='python')
