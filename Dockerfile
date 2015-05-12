@@ -77,6 +77,14 @@ RUN chmod a+x /home/reprophylo/trimal
 ADD readal /home/reprophylo/
 RUN chmod a+x /home/reprophylo/readal
 
+# exonerate
+ADD exonerate /home/reprophylo/
+RUN chmod a+x /home/reprophylo/exonerate
+
+# BayesTraitsV2
+ADD BayesTraitsV2 /home/reprophylo/
+RUN chmod a+x /home/reprophylo/BayesTraitsV2
+
 # pal2nal
 ADD pal2nal.pl /home/reprophylo/
 RUN chmod a+x /home/reprophylo/pal2nal.pl
@@ -87,6 +95,7 @@ RUN chmod -R a+rw /notebooks
 
 # ipython notebook
 RUN pip install ipython[notebook]
+RUN pip install --upgrade ipython[notebook]
 
 EXPOSE 8888
 
