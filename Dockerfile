@@ -63,6 +63,9 @@ ADD gb_syn.py /home/reprophylo/
 # HTML
 ADD HTML.py /home/reprophylo/
 
+# css
+ADD css.py /home/reprophylo/
+
 # raxml
 ADD raxmlHPC /home/reprophylo/
 RUN chmod a+x /home/reprophylo/raxmlHPC
