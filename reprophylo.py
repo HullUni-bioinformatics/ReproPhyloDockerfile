@@ -1,4 +1,4 @@
-reprophyloversion=1.0
+reprophyloversion=99c16963
 ############################################################################################
 if False:
     """
@@ -2175,7 +2175,7 @@ class Project:
                     if not all(i.split('_')[0] in locus_feature_ids for i in value):
                         print [i.split('_')[0] for i in value if not i.split('_')[0] in locus_feature_ids]
                         warnings.warn('Not all records to exclude exist in locus. Typos?')
-                    if start_from_max and not keep_safe == {}:
+                    if not start_from_max and not keep_safe == {}:
                         for record in keep_safe[key]:
                             if not record.id.split('_')[0] in [i.split('_')[0] for i in value]:
                                 subset.append(record)
@@ -2206,7 +2206,7 @@ class Project:
                         if record.id.split('_')[0] in [i.split('_')[0] for i in value]:
                             subset.append(record)
                     self.records_by_locus[key] = subset
-                    if not start_from_null:
+                    if not start_from_null and not keep_safe == {}:
                         self.records_by_locus[key] = subset+keep_safe[key]
             else:
                 warnings.warn('Locus name %s not recognised'%key)
@@ -2645,7 +2645,7 @@ class Project:
                     # find the number of chains
                     nchains = raxml_method.cline_args['nchain'].split()[0]
                     chain_names = ''
-                    for i in range(1,str(nchains)+1):
+                    for i in range(1,int(nchains)+1):
                         chain_names += "%s.%i "%(base_name, i)
                     chain_names = chain_names[:-1]
                     bpcomp_cline = "%s -c %f -x %i %i %s"%(bpcomp,
@@ -4044,7 +4044,9 @@ class RaxmlConf:
         aln_string = aln_string[:-1]
         command_lines = ''
         for i in self.command_lines.keys():
-            command_lines += i+': '+str(self.command_lines[i])+'\n'
+            command_lines += i+':\n'
+            for k in self.command_lines[i]:
+                command_lines += str(k) + '\n'
         date = str(self.timeit[0])
         
         execution = '[This was not executed yet]'
