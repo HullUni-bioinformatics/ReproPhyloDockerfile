@@ -19,7 +19,7 @@ The following instructions have Ubuntu in mind. Following them will download RAx
   
 `sudo apt-get install -y -q build-essential make gcc zlib1g-dev git python\`  
 `python-dev python-pip`  
-`sudo apt-get install -y -q libzmq3-dev sqlite3 libsqlite3-dev pandoc\  
+`sudo apt-get install -y -q libzmq3-dev sqlite3 libsqlite3-dev pandoc\`   
 `libcurl4-openssl-dev nodejs`  
 
 ### Jupyter notebook (skip if you already have it)
