@@ -17,8 +17,10 @@ The following instructions have Ubuntu in mind. Following them will download RAx
 
 ### Python and IPython dependencies
   
-`sudo apt-get install -y -q build-essential make gcc zlib1g-dev git python python-dev python-pip`  
-`sudo apt-get install -y -q libzmq3-dev sqlite3 libsqlite3-dev pandoc libcurl4-openssl-dev nodejs`  
+`sudo apt-get install -y -q build-essential make gcc zlib1g-dev git python\`  
+`python-dev python-pip`  
+`sudo apt-get install -y -q libzmq3-dev sqlite3 libsqlite3-dev pandoc\  
+`libcurl4-openssl-dev nodejs`  
 
 ### Jupyter notebook (skip if you already have it)
 `sudo pip install ipython[notebook]`  
@@ -30,7 +32,8 @@ The following instructions have Ubuntu in mind. Following them will download RAx
 
 ### Biopython
 
-`sudo apt-get install python-setuptools python-numpy python-qt4 python-scipy python-mysqldb python-lxml -y`  
+`sudo apt-get install python-setuptools python-numpy python-qt4\`  
+`python-scipy python-mysqldb python-lxml -y`  
 `sudo apt-get install python-biopython -y`  
 
 ### ETE2
@@ -70,7 +73,8 @@ The following instructions have Ubuntu in mind. Following them will download RAx
 
 #### Allow execution of binaries
 `cd ReproPhyloDockerfile-master`  
-`chmod a+x BayesTraitsV2 exonerate raxmlHPC raxmlHPC-PTHREADS-AVX raxmlHPC-PTHREADS-SSE3 readal trimal`  
+`chmod a+x BayesTraitsV2 exonerate raxmlHPC raxmlHPC-PTHREADS-AVX\`  
+`raxmlHPC-PTHREADS-SSE3 readal trimal`  
 
 #### Add to PATH and PYTHONPATH
 
