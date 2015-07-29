@@ -79,7 +79,7 @@ The following instructions have Ubuntu in mind. Following them will download RAx
 #### Add to PATH and PYTHONPATH
 
 `echo 'export PATH="$PATH:~/ReproPhyloDockerfile-master"' >> ~/.bashrc`  
-`echo 'export PYTONPATH="$PYTONPATH:~/ReproPhyloDockerfile-master"' >> ~/.bashrc`  
+`echo 'export PYTHONPATH="$PYTHONPATH:~/ReproPhyloDockerfile-master"' >> ~/.bashrc`  
 `source ~/.bashrc`   
 
 You should now be able to start jupyter notebook with   
