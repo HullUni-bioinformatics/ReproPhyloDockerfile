@@ -2173,18 +2173,18 @@ class Project:
                     self.records_by_locus[key] = []
                 else:
                     subset = []
-                    locus_feature_ids = [i.id.split('_')[0] for i in self.records_by_locus[key]]
-                    if not all(i.split('_')[0] in locus_feature_ids for i in value):
-                        print [i.split('_')[0] for i in value if not i.split('_')[0] in locus_feature_ids]
+                    locus_feature_ids = [i.id.rpartition('_')[0] for i in self.records_by_locus[key]]
+                    if not all(i in locus_feature_ids for i in value):
+                        print [i for i in value if not i in locus_feature_ids]
                         warnings.warn('Not all records to exclude exist in locus. Typos?')
                     if not start_from_max and not keep_safe == {}:
                         for record in keep_safe[key]:
-                            if not record.id.split('_')[0] in [i.split('_')[0] for i in value]:
+                            if not record.id.rpartition('_')[0] in [i for i in value]:
                                 subset.append(record)
                         self.records_by_locus[key] = subset
                     else:
                         for record in self.records_by_locus[key]:
-                            if not record.id.split('_')[0] in [i.split('_')[0] for i in value]:
+                            if not record.id.rpartition('_')[0] in [i for i in value]:
                                 subset.append(record)
                         self.records_by_locus[key] = subset
             else:
@@ -2200,12 +2200,12 @@ class Project:
                     pass
                 else:
                     subset = []
-                    locus_feature_ids = [i.id.split('_')[0] for i in self.records_by_locus[key]]
-                    if not all(i.split('_')[0] in locus_feature_ids for i in value):
-                        print [i.split('_')[0] for i in value if not i.split('_')[0] in locus_feature_ids]
+                    locus_feature_ids = [i.id.rpartition('_')[0] for i in self.records_by_locus[key]]
+                    if not all(i in locus_feature_ids for i in value):
+                        print [i for i in value if not i.split('_')[0] in locus_feature_ids]
                         warnings.warn('Not all records to include exist in locus. Typos?')
                     for record in self.records_by_locus[key]:
-                        if record.id.split('_')[0] in [i.split('_')[0] for i in value]:
+                        if record.id.rpartition('_')[0] in [i for i in value]:
                             subset.append(record)
                     self.records_by_locus[key] = subset
                     if not start_from_null and not keep_safe == {}:
@@ -2853,7 +2853,7 @@ class Project:
                 aln = self.alignments['%s@%s'%(token.split('@')[0], token.split('@')[1])]
                 alnlookup = dict((rec.id, str(rec.seq)) for rec in aln)
 
-                trimaln = self.alignments['%s@%s@%s'%(token.split('@')[0],
+                trimaln = self.trimmed_alignments['%s@%s@%s'%(token.split('@')[0],
                                                     token.split('@')[1],
                                                     token.split('@')[2])]
                 trimalnlookup = dict((rec.id, str(rec.seq)) for rec in trimaln)
@@ -4241,7 +4241,7 @@ def draw_boxplot(dictionary, y_axis_label, figs_folder): #'locus':[values]
     
 #################################################################################
 def report_methods(pj, figs_folder, output_directory, size='small',
-                   compare_trees=None, compare_meta=None, trees_to_compare='all',
+                   compare_trees=[], compare_meta=None, trees_to_compare='all',
                    unrooted_trees=False, mp_root=True):
 #################################################################################
         """
@@ -4824,7 +4824,7 @@ def revert_pickle(pj, commit_hash):
 
 
 def publish(pj, folder_name, figures_folder, size='small',
-            compare_trees=None, compare_meta=None, trees_to_compare='all',
+            compare_trees=[], compare_meta=None, trees_to_compare='all',
             unrooted_trees=False):
     
     import os, time
