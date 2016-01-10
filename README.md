@@ -22,7 +22,7 @@ The following instructions have Ubuntu in mind. Following them will download RAx
 `sudo apt-get install -y -q libzmq3-dev sqlite3 libsqlite3-dev pandoc\`   
 `libcurl4-openssl-dev nodejs`  
 
-### Jupyter notebook (skip if you already have it)
+### Jupyter notebook
 `sudo pip install ipython[notebook]`  
 `sudo pip install --upgrade ipython[notebook]`  
 
@@ -34,7 +34,10 @@ The following instructions have Ubuntu in mind. Following them will download RAx
 
 `sudo apt-get install python-setuptools python-numpy python-qt4\`  
 `python-scipy python-mysqldb python-lxml -y`  
-`sudo apt-get install python-biopython -y`  
+`sudo apt-get install python-biopython -y` 
+
+### ReproPhylo
+`sudo pip install reprophylo` 
 
 ### ETE2
 
@@ -61,7 +64,13 @@ The following instructions have Ubuntu in mind. Following them will download RAx
 
 `sudo apt-get install muscle -y`  
 
-### ReproPhylo, RAxML, TrimAl, exonerate, BayesTraits, HTML, pal2nal
+### RAxML, phylobayes, TrimAl, exonerate, BayesTraits, pal2nal
+
+Any of the above can be installed into your path to be recognized by reprophylo.  
+If they are on your machine but not in your path, reprophylo allows you to specify 
+the full path to the executable in your reprophylo script. 
+    
+Or, you can follow these instructions to get them all installed:
 
 #### Get the Dockerfile archive
 `cd ~`  
@@ -74,7 +83,7 @@ The following instructions have Ubuntu in mind. Following them will download RAx
 #### Allow execution of binaries
 `cd ReproPhyloDockerfile-master`  
 `chmod a+x BayesTraitsV2 exonerate raxmlHPC raxmlHPC-PTHREADS-AVX\`  
-`raxmlHPC-PTHREADS-SSE3 readal trimal`  
+`raxmlHPC-PTHREADS-SSE3 readal trimal pb tracecomp bpcomp`  
 
 #### Add to PATH and PYTHONPATH
 
